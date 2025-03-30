@@ -1,0 +1,185 @@
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    font-family: sans-serif;
+    background-color: #f0f0f0;
+}
+
+#image-container {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    position: relative;
+}
+
+#main-canvas {
+    border: 1px solid #ccc;
+    background-color: white;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain; /* Keep aspect ratio */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#input-container {
+    display: flex;
+    padding: 10px;
+    background-color: #fff;
+    border-top: 1px solid #ccc;
+    align-items: center;
+    position: relative; /* Needed for absolute positioning of input-canvas */
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+}
+
+#input-canvas {
+    position: absolute;
+    bottom: 60px; /* Position above the input bar */
+    left: 10px;
+    width: calc(100% - 20px); /* Match container padding */
+    height: 100px; /* Adjust height as needed */
+    border: 1px dashed #ccc;
+    background-color: rgba(255, 255, 255, 0.8); /* Slightly transparent */
+    cursor: crosshair;
+    touch-action: none; /* Prevent scrolling while drawing on touch devices */
+    z-index: 10; /* Ensure it's above the text input */
+}
+
+
+#text-input {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+#generate-button, #upload-button {
+    padding: 10px 15px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 5px;
+}
+
+#generate-button:hover, #upload-button:hover {
+    background-color: #0056b3;
+}
+
+/* Style for when dragging over the input canvas */
+#input-canvas.drag-over {
+    border-color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    font-family: sans-serif;
+    background-color: #f0f0f0;
+    overflow: hidden; /* Prevent body scroll */
+}
+
+#image-container {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    position: relative;
+    overflow: hidden; /* Ensure canvas stays within bounds */
+}
+
+#main-canvas {
+    border: 1px solid #ccc;
+    background-color: white;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain; /* Keep aspect ratio */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    display: block; /* Remove extra space below canvas */
+}
+
+#input-area {
+    flex-shrink: 0; /* Prevent shrinking */
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid #ccc;
+    background-color: #fff;
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+}
+
+#input-canvas {
+    width: 100%;
+    height: 100px; /* Initial height, might be adjusted */
+    border-bottom: 1px dashed #ccc;
+    background-color: #f8f8f8;
+    cursor: crosshair;
+    touch-action: none; /* Prevent scrolling while drawing on touch devices */
+    display: block; /* Remove extra space */
+    box-sizing: border-box; /* Include border in size */
+}
+
+#input-canvas.drag-over {
+    border-color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+
+#input-controls {
+    display: flex;
+    padding: 10px;
+    align-items: center;
+}
+
+#text-input {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+#generate-button,
+#upload-button {
+    padding: 8px 15px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 5px;
+    display: inline-flex; /* Align icon and text if needed */
+    align-items: center;
+    justify-content: center;
+    height: 38px; /* Match text input height */
+}
+#upload-button {
+     background-color: #6c757d;
+}
+
+
+#generate-button:hover {
+    background-color: #0056b3;
+}
+#upload-button:hover {
+     background-color: #5a6268;
+}
+
+
+#generate-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
