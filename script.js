@@ -8,6 +8,7 @@ let lastY = 0;
 let inputDrawingDataUrl = null;
 let uploadedImageDataUrl = null;
 let currentGeneratedImageUrl = null; // Store URL of the image on main canvas
+let hasDrawnOnInput = false; // Flag to check if actual drawing occurred
 
 const inputCtx = inputCanvas.getContext('2d');
 const imageCtx = imageCanvas.getContext('2d');
@@ -22,14 +23,31 @@ function resizeCanvas(canvas, container) {
              // For input canvas, match CSS dimensions
             if (canvas === inputCanvas) {
                 const style = window.getComputedStyle(canvas);
-                // Save current drawing before resize
-                const currentDrawing = inputCtx.getImageData(0, 0, canvas.width, canvas.height);
+                // Save current drawing before resize *if* it has content
+                 const currentDrawing = hasDrawnOnInput ? inputCtx.getImageData(0, 0, canvas.width, canvas.height) : null;
+
                 canvas.width = canvas.clientWidth; // Use clientWidth which reflects CSS size
                 canvas.height = canvas.clientHeight; // Use clientHeight
-                // Restore drawing after resize (optional, might distort)
-                // inputCtx.putImageData(currentDrawing, 0, 0); // Simple restore, might be offset/scaled incorrectly
-                // Or clear and let user redraw:
-                // clearInputCanvas(false); // Don't clear stored data, just visual
+
+                // Restore drawing after resize only if something was drawn
+                if (currentDrawing) {
+                     // A simple putImageData might distort. Consider redrawing or clearing.
+                     // For now, let's clear and user redraws on resize, simpler.
+                     clearInputCanvas(false); // Clear visual, keep data if needed (though data becomes outdated)
+                     console.log("Input canvas resized, visual cleared due to resize complexity.");
+                     // Or try to restore (might be inaccurate):
+                     // inputCtx.putImageData(currentDrawing, 0, 0);
+                } else {
+                     // If nothing was drawn, or if it was an uploaded image preview, just ensure it's clear.
+                     clearInputCanvas(false);
+                }
+
+                 // If an uploaded image was being previewed, redraw it
+                 if (uploadedImageDataUrl && !hasDrawnOnInput) {
+                     displayThumbnailOnInput(uploadedImageDataUrl);
+                 }
+
+
                 console.log(`Input canvas resized to: ${canvas.width}x${canvas.height}`);
             }
             // For main canvas, resize based on container and aspect ratio of loaded image
@@ -42,7 +60,7 @@ function resizeCanvas(canvas, container) {
                  const defaultWidth = Math.min(container.clientWidth - 40, 400); // Use container's current clientWidth
                  const defaultHeight = Math.min(container.clientHeight - 40, 300); // Use container's current clientHeight
                  // Maintain a default aspect ratio if desired
-                 const defaultAspectRatio = 4/3;
+                 const defaultAspectRatio = 16/9; // Use config or default
                  let canvasWidth = defaultWidth;
                  let canvasHeight = canvasWidth / defaultAspectRatio;
                  if(canvasHeight > defaultHeight) {
@@ -104,6 +122,7 @@ function startDrawing(e) {
 
 function draw(e) {
     if (!isDrawing) return;
+    hasDrawnOnInput = true; // Set flag: User has drawn
     const pos = getEventPos(inputCanvas, e);
     inputCtx.lineTo(pos.x, pos.y);
     inputCtx.strokeStyle = config.drawingColor;
@@ -111,24 +130,32 @@ function draw(e) {
     inputCtx.lineCap = 'round';
     inputCtx.lineJoin = 'round';
     inputCtx.stroke();
-    // Optimization: instead of beginPath+moveTo on every move, only do it after lifting the pen/finger
-    // This creates a single continuous path which might be better for some interpretations.
-    // Keeping the current approach for now as it works visually.
-    // inputCtx.beginPath(); // Begin new path segment for smoother drawing
-    // inputCtx.moveTo(pos.x, pos.y);
+    // Store current position for the next segment
     [lastX, lastY] = [pos.x, pos.y];
+    // For smoother lines, start a new path segment for the next move event
+    inputCtx.beginPath();
+    inputCtx.moveTo(lastX, lastY);
+
 }
 
 function stopDrawing() {
     if (!isDrawing) return;
-    // Don't call closePath if just drawing lines, only needed for filled shapes
-    // inputCtx.closePath();
     isDrawing = false;
-    inputDrawingDataUrl = inputCanvas.toDataURL('image/png');
-    // Clear uploaded image if user draws something
-    uploadedImageDataUrl = null;
-    imageUpload.value = null; // Reset file input visually
-    console.log("Drawing captured. Uploaded image cleared.");
+    // Only generate data URL if something was actually drawn
+    if (hasDrawnOnInput) {
+        inputDrawingDataUrl = inputCanvas.toDataURL('image/png');
+        // Clear uploaded image if user draws something AFTER uploading
+        if (uploadedImageDataUrl) {
+            uploadedImageDataUrl = null;
+            imageUpload.value = null; // Reset file input visually
+            console.log("Drawing captured. Previously uploaded image cleared.");
+        } else {
+            console.log("Drawing captured.");
+        }
+    } else {
+        inputDrawingDataUrl = null; // Ensure it's null if no drawing happened
+        console.log("Drawing stopped, but canvas seems empty.");
+    }
 }
 
 inputCanvas.addEventListener('mousedown', startDrawing);
@@ -136,10 +163,10 @@ inputCanvas.addEventListener('mousemove', draw);
 inputCanvas.addEventListener('mouseup', stopDrawing);
 inputCanvas.addEventListener('mouseout', () => { if (isDrawing) stopDrawing(); }); // Stop if mouse leaves canvas
 
-inputCanvas.addEventListener('touchstart', startDrawing, { passive: false }); // Need passive: false to call preventDefault
-inputCanvas.addEventListener('touchmove', draw, { passive: false }); // Need passive: false to call preventDefault
+inputCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+inputCanvas.addEventListener('touchmove', draw, { passive: false });
 inputCanvas.addEventListener('touchend', stopDrawing);
-inputCanvas.addEventListener('touchcancel', stopDrawing); // Handle interruption
+inputCanvas.addEventListener('touchcancel', stopDrawing);
 
 
 // --- Image Upload Logic ---
@@ -153,16 +180,22 @@ function handleFileSelect(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             uploadedImageDataUrl = e.target.result;
-            // Clear drawing if image is uploaded/dropped
-            clearInputCanvas(false); // Don't clear the stored drawing data URL yet, just visually
-            inputDrawingDataUrl = null; // Clear drawing data since image takes precedence
+            // Clear drawing data if image is uploaded/dropped
+            clearInputCanvas(false); // Clear visual first
+            inputDrawingDataUrl = null; // Clear drawing data
+            hasDrawnOnInput = false; // Reset drawing flag
             console.log("Image selected/dropped. Drawing cleared.");
-            // Optional: Display a thumbnail on input canvas or indicate upload success
-            displayThumbnailOnInput(uploadedImageDataUrl);
+            displayThumbnailOnInput(uploadedImageDataUrl); // Show preview
         };
+        reader.onerror = () => {
+             console.error("Error reading file.");
+             alert("Error reading the selected file.");
+             uploadedImageDataUrl = null;
+             imageUpload.value = null;
+        }
         reader.readAsDataURL(file);
     } else if (file) {
-         alert("Please select a valid image file.");
+         alert("Please select a valid image file (e.g., PNG, JPG, GIF).");
          imageUpload.value = null; // Reset file input if invalid file
     }
 }
@@ -171,12 +204,11 @@ function displayThumbnailOnInput(imageUrl) {
      const img = new Image();
     img.onload = () => {
         // Clear previous content first
-        clearInputCanvas(false);
-        inputCtx.fillStyle = 'rgba(230, 230, 230, 0.8)'; // Clear with slight overlay
+        clearInputCanvas(false); // Clear visual only
+        inputCtx.fillStyle = 'rgba(230, 230, 230, 0.8)'; // Background for thumb area
         inputCtx.fillRect(0,0, inputCanvas.width, inputCanvas.height);
         // Draw a small preview, centered
         const aspect = img.width / img.height;
-        // Make thumbnail smaller relative to input canvas size
         const maxDim = Math.min(inputCanvas.width * 0.7, inputCanvas.height * 0.7);
         let w = maxDim;
         let h = w / aspect;
@@ -190,6 +222,7 @@ function displayThumbnailOnInput(imageUrl) {
         inputCtx.strokeStyle = '#aaa';
         inputCtx.lineWidth = 1;
         inputCtx.strokeRect(x,y,w,h);
+        console.log("Displayed uploaded image thumbnail on input canvas.");
     }
     img.onerror = () => {
         console.error("Error loading image thumbnail for input canvas");
@@ -200,12 +233,14 @@ function displayThumbnailOnInput(imageUrl) {
 
 
 imageUpload.addEventListener('change', (event) => {
-    handleFileSelect(event.target.files[0]);
+    if (event.target.files && event.target.files.length > 0) {
+        handleFileSelect(event.target.files[0]);
+    }
 });
 
 // --- Drag and Drop Image Upload ---
 inputCanvas.addEventListener('dragover', (event) => {
-    event.preventDefault();
+    event.preventDefault(); // Necessary to allow drop
     inputCanvas.classList.add('drag-over');
 });
 
@@ -216,7 +251,9 @@ inputCanvas.addEventListener('dragleave', () => {
 inputCanvas.addEventListener('drop', (event) => {
     event.preventDefault();
     inputCanvas.classList.remove('drag-over');
-    handleFileSelect(event.dataTransfer.files[0]);
+    if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+        handleFileSelect(event.dataTransfer.files[0]);
+    }
 });
 
 
@@ -226,9 +263,10 @@ function clearInputCanvas(clearStoredData = true) {
     inputCtx.clearRect(0, 0, inputCanvas.width, inputCanvas.height);
     if (clearStoredData) {
         inputDrawingDataUrl = null;
-         uploadedImageDataUrl = null; // Also clear uploaded if clearing data
-         imageUpload.value = null; // Reset file input
-         console.log("Input canvas cleared (visual + data).");
+        uploadedImageDataUrl = null; // Also clear uploaded if clearing data
+        imageUpload.value = null; // Reset file input
+        hasDrawnOnInput = false; // Reset drawing flag
+        console.log("Input canvas cleared (visual + data).");
     } else {
         console.log("Input canvas cleared (visual only).");
     }
@@ -237,13 +275,24 @@ function clearInputCanvas(clearStoredData = true) {
 function drawImageOnCanvas(imageUrl) {
      const img = new Image();
     img.onload = () => {
-        currentGeneratedImageUrl = imageUrl; // Store the URL of the currently displayed image
+        currentGeneratedImageUrl = imageUrl; // Store the URL
         const container = document.getElementById('image-container');
-        // Use clientWidth/clientHeight which account for CSS sizing and padding
         const maxWidth = container.clientWidth - 40; // Account for padding
         const maxHeight = container.clientHeight - 40;
 
+        // Use naturalWidth/Height for intrinsic aspect ratio
         const aspectRatio = img.naturalWidth / img.naturalHeight;
+         if (!isFinite(aspectRatio) || aspectRatio <= 0) {
+             console.error("Invalid image aspect ratio detected.");
+             // Fallback to a default size or aspect ratio?
+             imageCanvas.width = Math.min(maxWidth, 300);
+             imageCanvas.height = Math.min(maxHeight, 200);
+             imageCtx.fillStyle = '#eee';
+             imageCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height);
+             imageCtx.fillStyle = '#555';
+             imageCtx.fillText("Error loading image", 10, 20);
+             return;
+         }
 
         let canvasWidth = maxWidth;
         let canvasHeight = canvasWidth / aspectRatio;
@@ -252,7 +301,7 @@ function drawImageOnCanvas(imageUrl) {
             canvasHeight = maxHeight;
             canvasWidth = canvasHeight * aspectRatio;
         }
-        // Ensure minimum size if needed, or handle 0 dimensions
+        // Ensure positive dimensions
         canvasWidth = Math.max(1, canvasWidth);
         canvasHeight = Math.max(1, canvasHeight);
 
@@ -264,76 +313,96 @@ function drawImageOnCanvas(imageUrl) {
         console.log(`Main canvas updated with image: ${imageCanvas.width}x${imageCanvas.height}`);
     };
     img.onerror = (err) => {
-        console.error("Error loading generated image onto canvas:", err);
-        alert("Failed to load the generated image.");
+        console.error("Error loading generated image onto canvas:", err, "URL:", imageUrl.substring(0,100)+"...");
+        alert("Failed to load the generated image. See console for details.");
         currentGeneratedImageUrl = null; // Clear stored URL on error
-        // Optionally clear the main canvas or show an error state
         debouncedResizeMainCanvas(); // Reset to default state
     };
-    // IMPORTANT: Check if the image URL needs proxying or is CORS-enabled.
-    // For websim.imageGen, the URL should generally be usable directly.
-    img.src = imageUrl;
+    img.src = imageUrl; // Start loading
 }
 
 
 async function handleGenerate() {
     const text = textInput.value.trim();
     const inputContent = [];
+    console.log("Starting generation process..."); // Log start
 
     if (text) {
         inputContent.push({ type: "text", text });
+        console.log("Added text to input:", text);
     }
-    // Prioritize uploaded image over drawing if both exist (drawing is cleared on upload)
+
+    // Prioritize uploaded image over drawing
     if (uploadedImageDataUrl) {
         inputContent.push({ type: "image_url", image_url: { url: uploadedImageDataUrl } });
         console.log("Using uploaded image in prompt.");
-    } else if (inputDrawingDataUrl) {
-        // Check if the drawing canvas is effectively empty (e.g., all transparent)
-        // This avoids sending an empty drawing.
-        // A simple check: is the data URL very short? (Might not be robust)
-        // A better check would involve analyzing pixel data, but let's keep it simple:
-        if (inputDrawingDataUrl && inputDrawingDataUrl.length > 100) { // Arbitrary threshold for non-empty PNG
+    } else if (hasDrawnOnInput && inputDrawingDataUrl) { // Check flag and if dataURL exists
+        inputContent.push({ type: "image_url", image_url: { url: inputDrawingDataUrl } });
+        console.log("Using drawing input in prompt.");
+    } else if (hasDrawnOnInput && !inputDrawingDataUrl) {
+        console.warn("Drawing flag is true, but data URL is missing. Was drawing stopped correctly?");
+        // Attempt to capture data URL again if drawing happened but URL is missing
+        stopDrawing(); // Recapture if needed
+        if(inputDrawingDataUrl) {
              inputContent.push({ type: "image_url", image_url: { url: inputDrawingDataUrl } });
-             console.log("Using drawing input in prompt.");
+             console.log("Using drawing input in prompt (recaptured).");
         } else {
-             console.log("Drawing input seems empty, skipping.");
+            console.error("Failed to get drawing data URL even after recapture.");
         }
+    } else {
+         console.log("No drawing or uploaded image provided/selected for input.");
     }
 
 
     if (inputContent.length === 0) {
-        alert("Please provide some input (text, drawing, or uploaded image).");
-        return;
+        alert("Please provide some input (text, drawing, or uploaded image) before generating.");
+        console.log("Generation cancelled: No valid input provided.");
+        return; // Stop execution
     }
 
     generateButton.disabled = true;
     generateButton.textContent = 'Generating...';
+    console.log("Inputs prepared, calling generateImage function...");
 
     try {
-        console.log("Sending input to generateImage:", JSON.stringify(inputContent).substring(0, 200) + "..."); // Log start of content
+        // Log the content being sent, careful with large data URLs
+        const loggableContent = inputContent.map(item =>
+            item.type === 'image_url'
+                ? { ...item, image_url: { url: item.image_url.url.substring(0, 100) + '...' } }
+                : item
+        );
+        console.log("Sending inputContent to generateImage:", JSON.stringify(loggableContent));
+
         const result = await generateImage(inputContent, config.generationAspectRatio);
+        console.log("Received result from generateImage:", result); // Log the raw result
 
         if (result && result.url) {
-             drawImageOnCanvas(result.url);
+             console.log("Generation successful, drawing image URL:", result.url.substring(0,100)+"...");
+             drawImageOnCanvas(result.url); // Display the image
         } else if (result && result.error) {
+             // Error message already constructed in llm.js
              alert(`Image generation failed: ${result.error}`);
-             console.error("Image generation failed:", result.error);
-             debouncedResizeMainCanvas(); // Reset main canvas on failure
+             console.error("Image generation failed (handled error):", result.error);
+             debouncedResizeMainCanvas(); // Reset main canvas visually
         } else {
-            alert("Image generation failed. No URL received. Check console for details.");
-             console.warn("Image generation returned unexpected result:", result);
-             debouncedResizeMainCanvas(); // Reset main canvas
+            // Unexpected: result exists but no url or error
+            alert("Image generation failed unexpectedly. No URL or error message received. Check console.");
+             console.warn("Image generation returned unexpected result structure:", result);
+             debouncedResizeMainCanvas();
         }
 
     } catch (error) {
-        console.error("Error during image generation process:", error);
-        alert(`An error occurred during generation: ${error.message}`);
-        debouncedResizeMainCanvas(); // Reset main canvas on error
+        // Catch errors thrown from generateImage or other synchronous issues here
+        console.error("Error caught in handleGenerate process:", error);
+        alert(`An unexpected error occurred during generation: ${error.message}`);
+        debouncedResizeMainCanvas();
     } finally {
+        // Re-enable button regardless of success or failure
         generateButton.disabled = false;
         generateButton.textContent = 'Generate';
-        // Decide whether to clear inputs after generation. Let's not clear automatically.
-        // clearInputCanvas(true); // Clears drawing/upload thumbnail + data
+        console.log("Generation process finished (enable button).");
+        // Optional: Clear inputs after generation? Generally better not to by default.
+        // clearInputCanvas(true);
         // textInput.value = '';
     }
 }
@@ -342,13 +411,13 @@ generateButton.addEventListener('click', handleGenerate);
 
 // --- Initial setup ---
 function initialize() {
-    // Initial resize needs to happen after elements are potentially sized by CSS
-    // Use setTimeout to ensure layout is complete
+    // Use setTimeout to defer initial resize until after first paint/layout
     setTimeout(() => {
         debouncedResizeInputCanvas();
         debouncedResizeMainCanvas(); // Set initial main canvas size/state
-        console.log("AI Image Editor Initialized");
+        console.log("AI Image Editor Initialized and Canvases Resized.");
     }, 0);
 }
 
+// Initialize the application
 initialize();
