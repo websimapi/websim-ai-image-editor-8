@@ -1,70 +1,3 @@
-import {Websim} from "@websim/ai-tools";
-
-const websim = new Websim();
-
-// Basic conversation history - might expand later if needed for multi-turn interaction
-export let conversationHistory = [];
-
-// Function to process input and generate a detailed prompt
-async function generateDetailedPrompt(inputContent) {
-    // Add user input to history
-    conversationHistory.push({ role: "user", content: inputContent });
-    // Keep history short for this use case
-    conversationHistory = conversationHistory.slice(-4);
-
-    const completion = await websim.chat.completions.create({
-        messages: [
-             {
-                role: "system",
-                content: `You are an AI assistant specialized in image generation prompts. Based on the user's input (which might include text, drawings, or uploaded images), create a detailed and descriptive prompt suitable for an AI image generation model. Focus on visual details, style, mood, and composition. If the user provides an image, describe it and incorporate any text instructions for modification or combination. If they provide a drawing, interpret it and enhance the description. If only text is provided, expand on it imaginatively. Respond with just the generated prompt, no extra text.`,
-            },
-            ...conversationHistory,
-        ],
-    });
-
-    const detailedPrompt = completion.content;
-    // Add AI response (the prompt) to history - useful if we want refinement later
-    conversationHistory.push({ role: "assistant", content: detailedPrompt });
-    console.log("Generated Detailed Prompt:", detailedPrompt);
-    return detailedPrompt;
-}
-
-
-// Function to generate the image using the detailed prompt
-export async function generateImage(inputContent) {
-    if (!websim.env.IMAGE_GEN_AVAILABLE) {
-        alert("Image generation is not available in this environment.");
-        console.error("Image generation unavailable.");
-         // Return a placeholder or dummy URL if needed for testing UI flow
-         // return { url: 'placeholder.png' };
-        return null;
-    }
-
-    try {
-        // Step 1: Generate the detailed prompt
-        const detailedPrompt = await generateDetailedPrompt(inputContent);
-
-        if (!detailedPrompt) {
-            throw new Error("Failed to generate a detailed prompt.");
-        }
-
-        // Step 2: Generate the image using the detailed prompt
-        // For simplicity, use a default aspect ratio for now, can be made configurable later
-        const result = await websim.imageGen({
-            prompt: detailedPrompt,
-            aspect_ratio: "16:9", // Or let the user choose later
-        });
-
-        console.log("Image generation API result:", result);
-        return result; // Should contain { url: "..." } on success
-
-    } catch (error) {
-        console.error("Error in generateImage:", error);
-        // Propagate the error or return null/error object
-        throw error; // Let the caller handle UI feedback
-    }
-}
-
 import { Websim } from "@websim/ai-tools";
 import { config } from './config.js'; // Import config if needed for LLM settings
 
@@ -174,4 +107,3 @@ export async function generateImage(inputContent, aspectRatio = config.generatio
          return { error: `Image generation process failed: ${error.message}` };
     }
 }
-
